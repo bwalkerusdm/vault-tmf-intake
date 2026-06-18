@@ -1,0 +1,3 @@
+# Only lib/vault_filing.py uses a third-party package; everything else is the
+# Python standard library (urllib.request, json, hashlib, datetime, ...).
+requests>=2.31,<3
