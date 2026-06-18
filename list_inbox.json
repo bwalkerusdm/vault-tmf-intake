@@ -1,0 +1,318 @@
+openapi: 3.0.0
+info:
+  title: TMF Intake — gate, file, and flag (Glean custom actions)
+  description: >
+    Custom actions for the Glean TMF intake agent. The agent does the reasoning
+    (reads each document, classifies within the live Vault taxonomy, resolves
+    study/country/site, assesses PHI and ALCOA+) and sends structured findings to
+    file_or_flag, which re-validates them DETERMINISTICALLY and either files a clean
+    document into Veeva Vault (In Progress, pre-QC) or holds a flagged one with a
+    reason. These same actions serve BOTH the interactive (one document at a time,
+    CRA-reviewed) and the bulk pipeline (Box 1-Inbox) scenarios.
+  version: 1.0.0
+servers:
+  - url: https://vault-tmf-intake.vercel.app
+security:
+  - bearerAuth: []
+paths:
+  /api/etmf/actions/list_inbox.py:
+    post:
+      operationId: listInbox
+      summary: List documents waiting in the Box 1-Inbox
+      description: Returns the files currently in the intake folder. Archives are flagged so the agent can expand them first.
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        '200':
+          description: The inbox contents
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  documents:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        box_file_id: { type: string }
+                        filename: { type: string }
+                        is_archive: { type: boolean }
+                  count: { type: integer }
+                  archives: { type: integer }
+
+  /api/etmf/actions/file_or_flag.py:
+    post:
+      operationId: fileOrFlag
+      summary: Run the deterministic gate on the agent's findings, then file (clean) or hold (flagged)
+      description: >
+        THE GATE. Send your structured findings for all five checks. The action
+        re-validates them deterministically — it verifies the classification triple
+        is a real member of the live Vault taxonomy, applies the confidence
+        thresholds, and fail-safes any missing/uncertain finding to "hold". A clean
+        result is filed to Vault and moved to 2-Filed; a flagged result is held in
+        3-Exceptions (or 0-Rejected if not a TMF artifact) with a written reason.
+        The gate cannot be overridden by the caller — a PHI finding, an ALCOA flag,
+        an ungrounded classification, or an unresolved record always holds.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [box_file_id, filename, findings]
+              properties:
+                box_file_id:
+                  type: string
+                  description: Box file ID of the document to file
+                filename:
+                  type: string
+                  description: Original filename including extension
+                findings:
+                  type: object
+                  description: The agent's structured findings for the five checks.
+                  properties:
+                    tmf_content:
+                      type: object
+                      properties:
+                        is_tmf: { type: boolean, description: "Is this a TMF artifact?" }
+                        zone: { type: string, description: "TMF zone, e.g. Trial Management" }
+                        artifact: { type: string }
+                        reason: { type: string, description: "If not TMF, why" }
+                        confidence: { type: integer, description: 0-100 }
+                    classification:
+                      type: object
+                      description: Use ONLY a triple returned by get_taxonomy. Never invent one.
+                      properties:
+                        type__v: { type: string }
+                        subtype__v: { type: string }
+                        classification__v: { type: string }
+                        tmf_rm_v3: { type: string }
+                        confidence: { type: integer, description: 0-100 }
+                        alternatives:
+                          type: array
+                          items: { type: object }
+                    phi_pii:
+                      type: object
+                      properties:
+                        status:
+                          type: string
+                          enum: [clear, findings]
+                          description: 'clear only if no SUBJECT identifiers; personnel/institutional identifiers are OK'
+                        findings:
+                          type: array
+                          items:
+                            type: object
+                            properties:
+                              identifier_type: { type: string }
+                              belongs_to: { type: string, description: "subject | personnel | institutional" }
+                              location: { type: string }
+                    alcoa_plus:
+                      type: object
+                      properties:
+                        attributes:
+                          type: object
+                          description: One entry per ALCOA+ attribute (attributable, legible, contemporaneous, original, accurate, complete, consistent, enduring, available).
+                          additionalProperties:
+                            type: object
+                            properties:
+                              verdict: { type: string, enum: [pass, flag] }
+                              basis: { type: string }
+                    record_resolution:
+                      type: object
+                      description: >
+                        IDs from resolve_record PLUS the raw references you read from the
+                        document (study_ref/country_ref/site_ref). The gate RE-RESOLVES the
+                        raw refs against the snapshot itself to set scope and resolution —
+                        so always pass them; do not force a document onto a "closest" site.
+                      properties:
+                        study_ref: { type: string, description: 'Study/project code as written on the document, e.g. ITOAS-Test-001' }
+                        country_ref: { type: string, description: "The site's country as written on the document" }
+                        site_ref: { type: string, description: 'Site number or name as written on the document, e.g. 2001' }
+                        study__v: { type: string }
+                        study_country__v: { type: string }
+                        site__v: { type: string }
+                        study_name: { type: string }
+                        study_country_name: { type: string }
+                        site_name: { type: string }
+                        all_resolved: { type: boolean }
+                        parent_validated: { type: boolean, description: Site rolls up to the correct country/study }
+                        scope: { type: string, description: "in_scope | out_of_scope | indeterminate (from resolve_record)" }
+                        scope_reason: { type: string }
+      responses:
+        '200':
+          description: Disposition result
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  disposition: { type: string, description: "filed | held" }
+                  status: { type: string, description: "clean | flagged | not_tmf | unprocessable" }
+                  checks_hash: { type: string }
+                  vault_document_id: { type: string }
+                  vault_link: { type: string }
+                  disposition_kind: { type: string }
+                  reasons:
+                    type: array
+                    items: { type: string }
+                  flag_rules:
+                    type: array
+                    items: { type: string }
+
+  /api/etmf/actions/expand_archive.py:
+    post:
+      operationId: expandArchive
+      summary: Unpack a .zip/.tar/.gz bundle into individual inbox documents
+      description: Call this when a listed document has is_archive=true. Each member file is re-uploaded into 1-Inbox to be processed on its own; the archive is moved out. Re-list the inbox afterward.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [box_file_id, filename]
+              properties:
+                box_file_id: { type: string }
+                filename: { type: string }
+      responses:
+        '200':
+          description: Extraction result
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  archive: { type: string }
+                  extracted:
+                    type: array
+                    items: { type: string }
+                  extracted_count: { type: integer }
+                  skipped:
+                    type: array
+                    items:
+                      type: array
+                      items: { type: string }
+                  message: { type: string }
+
+  /api/etmf/actions/report_unprocessable.py:
+    post:
+      operationId: reportUnprocessable
+      summary: Hold a document the agent cannot read/process, with a reason
+      description: >
+        Call this when you CANNOT read or process a document at all (empty/unreadable
+        content, read timeout, unsupported or corrupt format). Never skip a document
+        silently. It is held in 3-Exceptions with the reason and an audit event.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [box_file_id, filename, reason]
+              properties:
+                box_file_id: { type: string }
+                filename: { type: string }
+                reason: { type: string }
+      responses:
+        '200':
+          description: Held as unprocessable
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  disposition: { type: string }
+                  status: { type: string }
+                  disposition_kind: { type: string }
+                  reason: { type: string }
+
+  /api/etmf/actions/get_taxonomy.py:
+    post:
+      operationId: getTaxonomy
+      summary: Get the valid classification taxonomy to classify within
+      description: >
+        Returns the flat list of valid type/subtype/classification triples (served
+        from the indexed snapshot, no live Vault call). Classify ONLY within a triple
+        that appears here — never invent one. The gate re-checks membership against
+        this same source, so an off-list triple is always held.
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        '200':
+          description: The taxonomy
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  taxonomy:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        type__v: { type: string }
+                        subtype__v: { type: string }
+                        classification__v: { type: string }
+                        label: { type: string }
+                        tmf_rm_v3: { type: string }
+                  count: { type: integer }
+                  source: { type: string, description: "snapshot | vault_live" }
+
+  /api/etmf/actions/resolve_record.py:
+    post:
+      operationId: resolveRecord
+      summary: Resolve study / country / site references to Vault record IDs
+      description: >
+        Pass the identifiers you read from the document — study code or project code,
+        country, and site number or name. Resolves against the indexed snapshot (no
+        live Vault call). all_resolved=false means HOLD: a study/site/country mismatch,
+        a record not in the study, or IDs not yet populated. Read `notes` back to the
+        user so they see exactly what didn't line up.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                study: { type: string, description: 'Study code or project code, e.g. ITOAS-Test-001' }
+                country: { type: string, description: Country name as it appears on the document }
+                site: { type: string, description: 'Site number or name, e.g. 2001 or Mayo Clinic' }
+      responses:
+        '200':
+          description: Resolution result
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  study__v: { type: string }
+                  study_country__v: { type: string }
+                  site__v: { type: string }
+                  study_name: { type: string }
+                  study_country_name: { type: string }
+                  site_name: { type: string }
+                  all_resolved: { type: boolean }
+                  parent_validated: { type: boolean }
+                  scope: { type: string, description: "in_scope | out_of_scope | indeterminate. out_of_scope = the document belongs to another study/site — flag as misrouted, do NOT file." }
+                  scope_reason: { type: string, description: "wrong_study | unrecognized_site | country_mismatch | no_references" }
+                  resolved_via: { type: string }
+                  notes:
+                    type: array
+                    items: { type: string }
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      description: Use the GLEAN_BEARER_TOKEN value configured on the project.

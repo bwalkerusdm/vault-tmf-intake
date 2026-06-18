@@ -1,0 +1,194 @@
+openapi: 3.0.0
+info:
+  title: File or Flag TMF Document
+  version: 1.0.0
+servers:
+- url: https://vault-tmf-intake.vercel.app
+security:
+- bearerAuth: []
+paths:
+  /api/etmf/actions/file_or_flag.py:
+    post:
+      operationId: fileOrFlag
+      summary: Run the deterministic gate on the agent's findings, then file (clean) or hold (flagged)
+      description: 'THE GATE. Send your structured findings for all five checks. The action re-validates
+        them deterministically — it verifies the classification triple is a real member of the live Vault
+        taxonomy, applies the confidence thresholds, and fail-safes any missing/uncertain finding to "hold".
+        A clean result is filed to Vault and moved to 2-Filed; a flagged result is held in 3-Exceptions
+        (or 0-Rejected if not a TMF artifact) with a written reason. The gate cannot be overridden by
+        the caller — a PHI finding, an ALCOA flag, an ungrounded classification, or an unresolved record
+        always holds.
+
+        '
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+              - box_file_id
+              - filename
+              - findings
+              properties:
+                box_file_id:
+                  type: string
+                  description: Box file ID of the document to file
+                filename:
+                  type: string
+                  description: Original filename including extension
+                findings:
+                  type: object
+                  description: The agent's structured findings for the five checks.
+                  properties:
+                    tmf_content:
+                      type: object
+                      properties:
+                        is_tmf:
+                          type: boolean
+                          description: Is this a TMF artifact?
+                        zone:
+                          type: string
+                          description: TMF zone, e.g. Trial Management
+                        artifact:
+                          type: string
+                        reason:
+                          type: string
+                          description: If not TMF, why
+                        confidence:
+                          type: integer
+                          description: 0-100
+                    classification:
+                      type: object
+                      description: Use ONLY a triple returned by get_taxonomy. Never invent one.
+                      properties:
+                        type__v:
+                          type: string
+                        subtype__v:
+                          type: string
+                        classification__v:
+                          type: string
+                        tmf_rm_v3:
+                          type: string
+                        confidence:
+                          type: integer
+                          description: 0-100
+                        alternatives:
+                          type: array
+                          items:
+                            type: object
+                    phi_pii:
+                      type: object
+                      properties:
+                        status:
+                          type: string
+                          enum:
+                          - clear
+                          - findings
+                          description: clear only if no SUBJECT identifiers; personnel/institutional identifiers
+                            are OK
+                        findings:
+                          type: array
+                          items:
+                            type: object
+                            properties:
+                              identifier_type:
+                                type: string
+                              belongs_to:
+                                type: string
+                                description: subject | personnel | institutional
+                              location:
+                                type: string
+                    alcoa_plus:
+                      type: object
+                      properties:
+                        attributes:
+                          type: object
+                          description: One entry per ALCOA+ attribute (attributable, legible, contemporaneous,
+                            original, accurate, complete, consistent, enduring, available).
+                          additionalProperties:
+                            type: object
+                            properties:
+                              verdict:
+                                type: string
+                                enum:
+                                - pass
+                                - flag
+                              basis:
+                                type: string
+                    record_resolution:
+                      type: object
+                      description: 'IDs from resolve_record PLUS the raw references you read from the
+                        document (study_ref/country_ref/site_ref). The gate RE-RESOLVES the raw refs against
+                        the snapshot itself to set scope and resolution — so always pass them; do not
+                        force a document onto a "closest" site.
+
+                        '
+                      properties:
+                        study_ref:
+                          type: string
+                          description: Study/project code as written on the document, e.g. ITOAS-Test-001
+                        country_ref:
+                          type: string
+                          description: The site's country as written on the document
+                        site_ref:
+                          type: string
+                          description: Site number or name as written on the document, e.g. 2001
+                        study__v:
+                          type: string
+                        study_country__v:
+                          type: string
+                        site__v:
+                          type: string
+                        study_name:
+                          type: string
+                        study_country_name:
+                          type: string
+                        site_name:
+                          type: string
+                        all_resolved:
+                          type: boolean
+                        parent_validated:
+                          type: boolean
+                          description: Site rolls up to the correct country/study
+                        scope:
+                          type: string
+                          description: in_scope | out_of_scope | indeterminate (from resolve_record)
+                        scope_reason:
+                          type: string
+      responses:
+        '200':
+          description: Disposition result
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  disposition:
+                    type: string
+                    description: filed | held
+                  status:
+                    type: string
+                    description: clean | flagged | not_tmf | unprocessable
+                  checks_hash:
+                    type: string
+                  vault_document_id:
+                    type: string
+                  vault_link:
+                    type: string
+                  disposition_kind:
+                    type: string
+                  reasons:
+                    type: array
+                    items:
+                      type: string
+                  flag_rules:
+                    type: array
+                    items:
+                      type: string
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      description: Use the GLEAN_BEARER_TOKEN value configured on the project.
