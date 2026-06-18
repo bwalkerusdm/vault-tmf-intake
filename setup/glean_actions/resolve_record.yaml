@@ -1,0 +1,78 @@
+openapi: 3.0.0
+info:
+  title: Resolve Study Country Site
+  version: 1.0.0
+servers:
+- url: https://vault-tmf-intake.vercel.app
+security:
+- bearerAuth: []
+paths:
+  /api/etmf/actions/resolve_record.py:
+    post:
+      operationId: resolveRecord
+      summary: Resolve study / country / site references to Vault record IDs
+      description: 'Pass the identifiers you read from the document — study code or project code, country,
+        and site number or name. Resolves against the indexed snapshot (no live Vault call). all_resolved=false
+        means HOLD: a study/site/country mismatch, a record not in the study, or IDs not yet populated.
+        Read `notes` back to the user so they see exactly what didn''t line up.
+
+        '
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                study:
+                  type: string
+                  description: Study code or project code, e.g. ITOAS-Test-001
+                country:
+                  type: string
+                  description: Country name as it appears on the document
+                site:
+                  type: string
+                  description: Site number or name, e.g. 2001 or Mayo Clinic
+      responses:
+        '200':
+          description: Resolution result
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  study__v:
+                    type: string
+                  study_country__v:
+                    type: string
+                  site__v:
+                    type: string
+                  study_name:
+                    type: string
+                  study_country_name:
+                    type: string
+                  site_name:
+                    type: string
+                  all_resolved:
+                    type: boolean
+                  parent_validated:
+                    type: boolean
+                  scope:
+                    type: string
+                    description: in_scope | out_of_scope | indeterminate. out_of_scope = the document
+                      belongs to another study/site — flag as misrouted, do NOT file.
+                  scope_reason:
+                    type: string
+                    description: wrong_study | unrecognized_site | country_mismatch | no_references
+                  resolved_via:
+                    type: string
+                  notes:
+                    type: array
+                    items:
+                      type: string
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      description: Use the GLEAN_BEARER_TOKEN value configured on the project.

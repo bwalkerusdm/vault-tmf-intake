@@ -1,0 +1,109 @@
+{
+  "openapi": "3.0.0",
+  "info": {
+    "title": "Resolve Study Country Site",
+    "version": "1.0.0"
+  },
+  "servers": [
+    {
+      "url": "https://vault-tmf-intake.vercel.app"
+    }
+  ],
+  "security": [
+    {
+      "bearerAuth": []
+    }
+  ],
+  "paths": {
+    "/api/etmf/actions/resolve_record.py": {
+      "post": {
+        "operationId": "resolveRecord",
+        "summary": "Resolve a document's study/country/site references to Vault IDs and report scope.",
+        "requestBody": {
+          "required": false,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "study": {
+                    "type": "string",
+                    "description": "Study or project code as written on the document"
+                  },
+                  "country": {
+                    "type": "string",
+                    "description": "The site's country as written on the document"
+                  },
+                  "site": {
+                    "type": "string",
+                    "description": "Site number or name as written on the document"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "study__v": {
+                      "type": "string"
+                    },
+                    "study_country__v": {
+                      "type": "string"
+                    },
+                    "site__v": {
+                      "type": "string"
+                    },
+                    "study_name": {
+                      "type": "string"
+                    },
+                    "study_country_name": {
+                      "type": "string"
+                    },
+                    "site_name": {
+                      "type": "string"
+                    },
+                    "all_resolved": {
+                      "type": "boolean"
+                    },
+                    "parent_validated": {
+                      "type": "boolean"
+                    },
+                    "scope": {
+                      "type": "string",
+                      "description": "in_scope | out_of_scope | indeterminate"
+                    },
+                    "scope_reason": {
+                      "type": "string",
+                      "description": "wrong_study | unrecognized_site | country_mismatch | no_references"
+                    },
+                    "notes": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "securitySchemes": {
+      "bearerAuth": {
+        "type": "http",
+        "scheme": "bearer"
+      }
+    }
+  }
+}

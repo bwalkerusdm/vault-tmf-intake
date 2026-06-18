@@ -1,0 +1,59 @@
+openapi: 3.0.0
+info:
+  title: Expand Archive
+  version: 1.0.0
+servers:
+- url: https://vault-tmf-intake.vercel.app
+security:
+- bearerAuth: []
+paths:
+  /api/etmf/actions/expand_archive.py:
+    post:
+      operationId: expandArchive
+      summary: Unpack a .zip/.tar/.gz bundle into individual inbox documents
+      description: Call this when a listed document has is_archive=true. Each member file is re-uploaded
+        into 1-Inbox to be processed on its own; the archive is moved out. Re-list the inbox afterward.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+              - box_file_id
+              - filename
+              properties:
+                box_file_id:
+                  type: string
+                filename:
+                  type: string
+      responses:
+        '200':
+          description: Extraction result
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  archive:
+                    type: string
+                  extracted:
+                    type: array
+                    items:
+                      type: string
+                  extracted_count:
+                    type: integer
+                  skipped:
+                    type: array
+                    items:
+                      type: array
+                      items:
+                        type: string
+                  message:
+                    type: string
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      description: Use the GLEAN_BEARER_TOKEN value configured on the project.

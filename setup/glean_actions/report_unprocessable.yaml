@@ -1,0 +1,57 @@
+openapi: 3.0.0
+info:
+  title: Report Unprocessable Document
+  version: 1.0.0
+servers:
+- url: https://vault-tmf-intake.vercel.app
+security:
+- bearerAuth: []
+paths:
+  /api/etmf/actions/report_unprocessable.py:
+    post:
+      operationId: reportUnprocessable
+      summary: Hold a document the agent cannot read/process, with a reason
+      description: 'Call this when you CANNOT read or process a document at all (empty/unreadable content,
+        read timeout, unsupported or corrupt format). Never skip a document silently. It is held in 3-Exceptions
+        with the reason and an audit event.
+
+        '
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+              - box_file_id
+              - filename
+              - reason
+              properties:
+                box_file_id:
+                  type: string
+                filename:
+                  type: string
+                reason:
+                  type: string
+      responses:
+        '200':
+          description: Held as unprocessable
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  disposition:
+                    type: string
+                  status:
+                    type: string
+                  disposition_kind:
+                    type: string
+                  reason:
+                    type: string
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      description: Use the GLEAN_BEARER_TOKEN value configured on the project.

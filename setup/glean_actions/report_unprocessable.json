@@ -1,0 +1,88 @@
+{
+  "openapi": "3.0.0",
+  "info": {
+    "title": "Report Unprocessable Document",
+    "version": "1.0.0"
+  },
+  "servers": [
+    {
+      "url": "https://vault-tmf-intake.vercel.app"
+    }
+  ],
+  "security": [
+    {
+      "bearerAuth": []
+    }
+  ],
+  "paths": {
+    "/api/etmf/actions/report_unprocessable.py": {
+      "post": {
+        "operationId": "reportUnprocessable",
+        "summary": "Hold a document that cannot be read or processed, with a reason.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "box_file_id": {
+                    "type": "string",
+                    "description": "Box file ID"
+                  },
+                  "filename": {
+                    "type": "string",
+                    "description": "Original filename including extension"
+                  },
+                  "reason": {
+                    "type": "string",
+                    "description": "Why it can't be processed"
+                  }
+                },
+                "required": [
+                  "box_file_id",
+                  "filename",
+                  "reason"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "disposition": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "type": "string"
+                    },
+                    "disposition_kind": {
+                      "type": "string"
+                    },
+                    "reason": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "securitySchemes": {
+      "bearerAuth": {
+        "type": "http",
+        "scheme": "bearer"
+      }
+    }
+  }
+}
